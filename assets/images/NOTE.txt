@@ -1,0 +1,2 @@
+Please add a proper Google logo image file (google_logo.png) in this directory.
+The image should be 24x24 pixels and comply with Google's branding guidelines.
