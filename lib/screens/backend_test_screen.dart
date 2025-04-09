@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
-import '../models/farm.dart';
-import '../models/product.dart';
 
 class BackendTestScreen extends StatefulWidget {
   const BackendTestScreen({Key? key}) : super(key: key);
@@ -14,35 +12,36 @@ class BackendTestScreen extends StatefulWidget {
 class _BackendTestScreenState extends State<BackendTestScreen> {
   final ApiService _apiService = ApiService();
   final AuthService _authService = AuthService();
-  
+
   bool _isLoading = false;
-  String _testResults = 'Press "Run Tests" button to start testing backend connection';
-  
+  String _testResults =
+      'Press "Run Tests" button to start testing backend connection';
+
   // Test email and password
   final String _testEmail = 'admin@freshfarmily.com';
   final String _testPassword = 'admin123';
-  
+
   Future<void> _runTests() async {
     setState(() {
       _isLoading = true;
       _testResults = 'Running tests...\n';
     });
-    
+
     try {
       // Step 1: Test authentication
       _appendResult('🔒 Testing Authentication...');
       final authResult = await _testAuthentication();
-      
+
       if (authResult) {
         // Step 2: Test farms endpoint
         _appendResult('\n🏡 Testing Farms Endpoint...');
         await _testFarmsEndpoint();
-        
+
         // Step 3: Test products endpoint
         _appendResult('\n🛒 Testing Products Endpoint...');
         await _testProductsEndpoint();
       }
-      
+
       _appendResult('\n✅ All tests completed!');
     } catch (e) {
       _appendResult('\n❌ Error during tests: $e');
@@ -52,17 +51,17 @@ class _BackendTestScreenState extends State<BackendTestScreen> {
       });
     }
   }
-  
+
   Future<bool> _testAuthentication() async {
     try {
       _appendResult('📝 Attempting login with test credentials');
-      
+
       final result = await _authService.login(_testEmail, _testPassword);
-      
+
       if (result.containsKey('access_token')) {
         final token = result['access_token'];
         final role = result['role'] ?? result['user_role'] ?? 'Not specified';
-        
+
         _appendResult('✅ Authentication successful!');
         _appendResult('🔑 Token received: ${token.substring(0, 20)}...');
         _appendResult('👤 User role: $role');
@@ -76,16 +75,16 @@ class _BackendTestScreenState extends State<BackendTestScreen> {
       return false;
     }
   }
-  
+
   Future<void> _testFarmsEndpoint() async {
     try {
       _appendResult('🔍 Fetching farms from backend...');
-      
+
       final farms = await _apiService.getFarms();
-      
+
       _appendResult('✅ Successfully connected to farms endpoint!');
       _appendResult('📊 Retrieved ${farms.items.length} farms');
-      
+
       if (farms.items.isNotEmpty) {
         final firstFarm = farms.items.first;
         _appendResult('🏡 First farm: ${firstFarm.name}');
@@ -97,20 +96,21 @@ class _BackendTestScreenState extends State<BackendTestScreen> {
       _appendResult('❌ Farms endpoint error: $e');
     }
   }
-  
+
   Future<void> _testProductsEndpoint() async {
     try {
       _appendResult('🔍 Fetching products from backend...');
-      
+
       final products = await _apiService.getProducts();
-      
+
       _appendResult('✅ Successfully connected to products endpoint!');
       _appendResult('📊 Retrieved ${products.items.length} products');
-      
+
       if (products.items.isNotEmpty) {
         final firstProduct = products.items.first;
         _appendResult('🥕 First product: ${firstProduct.name}');
-        _appendResult('💰 Price: \$${firstProduct.price} per ${firstProduct.unit}');
+        _appendResult(
+            '💰 Price: \$${firstProduct.price} per ${firstProduct.unit}');
       } else {
         _appendResult('ℹ️ No products found in the response');
       }
@@ -118,7 +118,7 @@ class _BackendTestScreenState extends State<BackendTestScreen> {
       _appendResult('❌ Products endpoint error: $e');
     }
   }
-  
+
   void _appendResult(String text) {
     setState(() {
       _testResults += '$text\n';
