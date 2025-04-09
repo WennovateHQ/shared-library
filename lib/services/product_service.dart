@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared/utils/logging_service.dart';
 import '../models/product.dart';
 import '../config.dart';
 import 'auth_service.dart';
 
 class ProductService extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final LoggingService _logger = LoggingService('ProductService');
   final List<Product> _products = [];
   bool _isLoading = false;
   String? _error;
@@ -22,25 +24,17 @@ class ProductService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Use mock data in test mode
-      if (FreshConfig.testingMode) {
-        await Future.delayed(const Duration(milliseconds: 800)); // Simulate network delay
-        final mockProducts = _getMockProducts();
-        _products.clear();
-        _products.addAll(mockProducts);
-        _isLoading = false;
-        notifyListeners();
-        return mockProducts;
-      }
-
       final headers = await _authService.getAuthHeaders();
       final response = await http.get(
         Uri.parse('${FreshConfig.apiUrl}/products'),
         headers: headers,
       );
 
+      _logger.debug('Get all products response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
-        final List<dynamic> productData = json.decode(response.body);
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final List<dynamic> productData = responseData['products'] ?? responseData['data'] ?? responseData;
         _products.clear();
         
         for (var product in productData) {
@@ -57,17 +51,7 @@ class ProductService extends ChangeNotifier {
         return [];
       }
     } catch (e) {
-      debugPrint('Error fetching products: $e');
-      // Fallback to mock data in case of error and testing mode is enabled
-      if (FreshConfig.testingMode) {
-        final mockProducts = _getMockProducts();
-        _products.clear();
-        _products.addAll(mockProducts);
-        _isLoading = false;
-        notifyListeners();
-        return mockProducts;
-      }
-      
+      _logger.error('Error fetching products: $e');
       _error = 'Error fetching products: $e';
       _isLoading = false;
       notifyListeners();
@@ -82,23 +66,17 @@ class ProductService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Use mock data in test mode
-      if (FreshConfig.testingMode) {
-        await Future.delayed(const Duration(milliseconds: 800)); // Simulate network delay
-        final mockProducts = _getMockProducts().take(4).toList(); // Take first 4 products as featured
-        _isLoading = false;
-        notifyListeners();
-        return mockProducts;
-      }
-
       final headers = await _authService.getAuthHeaders();
       final response = await http.get(
         Uri.parse('${FreshConfig.apiUrl}/products/featured'),
         headers: headers,
       );
 
+      _logger.debug('Get featured products response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
-        final List<dynamic> productData = json.decode(response.body);
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final List<dynamic> productData = responseData['products'] ?? responseData['data'] ?? responseData;
         final List<Product> featuredProducts = [];
         
         for (var product in productData) {
@@ -118,15 +96,7 @@ class ProductService extends ChangeNotifier {
         return [];
       }
     } catch (e) {
-      debugPrint('Error fetching featured products: $e');
-      // Fallback to mock data in case of error and testing mode is enabled
-      if (FreshConfig.testingMode) {
-        final mockProducts = _getMockProducts().take(4).toList(); // Take first 4 products as featured
-        _isLoading = false;
-        notifyListeners();
-        return mockProducts;
-      }
-      
+      _logger.error('Error fetching featured products: $e');
       _error = 'Error fetching featured products: $e';
       _isLoading = false;
       notifyListeners();
@@ -141,23 +111,17 @@ class ProductService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Use mock data in test mode
-      if (FreshConfig.testingMode) {
-        await Future.delayed(const Duration(milliseconds: 800)); // Simulate network delay
-        final mockProducts = _getMockProducts().where((p) => p.farmId == farmId).toList();
-        _isLoading = false;
-        notifyListeners();
-        return mockProducts.isEmpty ? _getMockProducts().take(3).toList() : mockProducts;
-      }
-
       final headers = await _authService.getAuthHeaders();
       final response = await http.get(
-        Uri.parse('${FreshConfig.apiUrl}/farms/$farmId/products'),
+        Uri.parse('${FreshConfig.apiUrl}/products/farm/$farmId'),
         headers: headers,
       );
 
+      _logger.debug('Get products by farm ID response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
-        final List<dynamic> productData = json.decode(response.body);
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final List<dynamic> productData = responseData['products'] ?? responseData['data'] ?? responseData;
         final List<Product> farmProducts = [];
         
         for (var product in productData) {
@@ -174,15 +138,7 @@ class ProductService extends ChangeNotifier {
         return [];
       }
     } catch (e) {
-      debugPrint('Error fetching farm products: $e');
-      // Fallback to mock data in case of error and testing mode is enabled
-      if (FreshConfig.testingMode) {
-        final mockProducts = _getMockProducts().where((p) => p.farmId == farmId).toList();
-        _isLoading = false;
-        notifyListeners();
-        return mockProducts.isEmpty ? _getMockProducts().take(3).toList() : mockProducts;
-      }
-      
+      _logger.error('Error fetching farm products: $e');
       _error = 'Error fetching farm products: $e';
       _isLoading = false;
       notifyListeners();
@@ -197,188 +153,235 @@ class ProductService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Use mock data in test mode
-      if (FreshConfig.testingMode) {
-        await Future.delayed(const Duration(milliseconds: 800)); // Simulate network delay
-        final mockProduct = _getMockProducts().firstWhere(
-          (product) => product.id == id,
-          orElse: () => _getMockProducts().first,
-        );
-        _isLoading = false;
-        notifyListeners();
-        return mockProduct;
-      }
-
       final headers = await _authService.getAuthHeaders();
       final response = await http.get(
         Uri.parse('${FreshConfig.apiUrl}/products/$id'),
         headers: headers,
       );
 
+      _logger.debug('Get product by ID response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
-        final productData = json.decode(response.body);
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final Map<String, dynamic> productData = responseData['product'] ?? responseData;
         final product = Product.fromJson(productData);
         
         _isLoading = false;
         notifyListeners();
         return product;
+      } else if (response.statusCode == 404) {
+        _error = 'Product not found';
+        _isLoading = false;
+        notifyListeners();
+        return null;
       } else {
-        _error = 'Failed to load product details: ${response.statusCode}';
+        _error = 'Failed to load product: ${response.statusCode}';
         _isLoading = false;
         notifyListeners();
         return null;
       }
     } catch (e) {
-      debugPrint('Error fetching product details: $e');
-      // Fallback to mock data in case of error and testing mode is enabled
-      if (FreshConfig.testingMode) {
-        final mockProduct = _getMockProducts().firstWhere(
-          (product) => product.id == id,
-          orElse: () => _getMockProducts().first,
-        );
-        _isLoading = false;
-        notifyListeners();
-        return mockProduct;
-      }
-      
-      _error = 'Error fetching product details: $e';
+      _logger.error('Error fetching product: $e');
+      _error = 'Error fetching product: $e';
       _isLoading = false;
       notifyListeners();
       return null;
     }
   }
 
-  // Helper method to get mock products for testing
-  List<Product> _getMockProducts() {
-    return [
-      Product(
-        id: '1',
-        name: 'Organic Heirloom Tomatoes',
-        description: 'Juicy, flavorful heirloom tomatoes grown without synthetic pesticides or fertilizers.',
-        price: 4.99,
-        unit: 'lb',
-        category: 'Vegetables',
-        farmId: '1',
-        farmName: 'Green Valley Organics',
-        isOrganic: true,
-        inStock: true,
-        quantity: 25,
-        availableFrom: DateTime.now(),
-        availableTo: DateTime.now().add(const Duration(days: 14)),
-        imageUrl: 'https://images.unsplash.com/photo-1582284540020-8acbe03f4924?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=735&q=80',
-      ),
-      Product(
-        id: '2',
-        name: 'Fresh Strawberries',
-        description: 'Sweet, juicy strawberries picked at peak ripeness.',
-        price: 5.99,
-        unit: 'pint',
-        category: 'Fruits',
-        farmId: '1',
-        farmName: 'Green Valley Organics',
-        isOrganic: true,
-        inStock: true,
-        quantity: 15,
-        availableFrom: DateTime.now(),
-        availableTo: DateTime.now().add(const Duration(days: 7)),
-        imageUrl: 'https://images.unsplash.com/photo-1464965911861-746a04b4bca6?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80',
-      ),
-      Product(
-        id: '3',
-        name: 'Free Range Eggs',
-        description: 'Farm-fresh eggs from free-range chickens raised without antibiotics.',
-        price: 6.99,
-        unit: 'dozen',
-        category: 'Dairy & Eggs',
-        farmId: '2',
-        farmName: 'Happy Hen Farms',
-        isOrganic: true,
-        inStock: true,
-        quantity: 30,
-        availableFrom: DateTime.now(),
-        availableTo: DateTime.now().add(const Duration(days: 14)),
-        imageUrl: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80',
-      ),
-      Product(
-        id: '4',
-        name: 'Fresh-caught Salmon',
-        description: 'Wild-caught Pacific salmon, sustainably harvested.',
-        price: 19.99,
-        unit: 'lb',
-        category: 'Seafood',
-        farmId: '3',
-        farmName: 'Coastal Harvest',
-        isOrganic: false,
-        inStock: true,
-        quantity: 8,
-        availableFrom: DateTime.now(),
-        availableTo: DateTime.now().add(const Duration(days: 3)),
-        imageUrl: 'https://images.unsplash.com/photo-1574781330855-d0db8cc6a79c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80',
-      ),
-      Product(
-        id: '5',
-        name: 'Artisanal Cheese Sampler',
-        description: 'Selection of handcrafted artisanal cheeses from grass-fed cows.',
-        price: 24.99,
-        unit: 'package',
-        category: 'Dairy & Eggs',
-        farmId: '4',
-        farmName: 'Heritage Dairy',
-        isOrganic: true,
-        inStock: true,
-        quantity: 10,
-        availableFrom: DateTime.now(),
-        availableTo: DateTime.now().add(const Duration(days: 14)),
-        imageUrl: 'https://images.unsplash.com/photo-1452195100486-9cc805987862?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1469&q=80',
-      ),
-      Product(
-        id: '6',
-        name: 'Honeycrisp Apples',
-        description: 'Crisp, sweet-tart apples perfect for snacking or baking.',
-        price: 3.99,
-        unit: 'lb',
-        category: 'Fruits',
-        farmId: '5',
-        farmName: 'Sunrise Orchards',
-        isOrganic: true,
-        inStock: true,
-        quantity: 40,
-        availableFrom: DateTime.now(),
-        availableTo: DateTime.now().add(const Duration(days: 21)),
-        imageUrl: 'https://images.unsplash.com/photo-1503327431567-3ab5e6e79140?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1096&q=80',
-      ),
-      Product(
-        id: '7',
-        name: 'Grass-fed Ground Beef',
-        description: 'Premium grass-fed beef, no hormones or antibiotics.',
-        price: 8.99,
-        unit: 'lb',
-        category: 'Meat',
-        farmId: '1',
-        farmName: 'Green Valley Organics',
-        isOrganic: true,
-        inStock: true,
-        quantity: 15,
-        availableFrom: DateTime.now(),
-        availableTo: DateTime.now().add(const Duration(days: 5)),
-        imageUrl: 'https://images.unsplash.com/photo-1602470521006-6ba3f89aefc3?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80',
-      ),
-      Product(
-        id: '8',
-        name: 'Fresh Oysters',
-        description: 'Fresh Pacific oysters, harvested daily.',
-        price: 16.99,
-        unit: 'dozen',
-        category: 'Seafood',
-        farmId: '3',
-        farmName: 'Coastal Harvest',
-        isOrganic: false,
-        inStock: true,
-        quantity: 10,
-        availableFrom: DateTime.now(),
-        availableTo: DateTime.now().add(const Duration(days: 2)),
-        imageUrl: 'https://images.unsplash.com/photo-1604847399396-cf235af1d21c?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=687&q=80',
-      ),
-    ];
+  // Create new product
+  Future<Product?> createProduct(Map<String, dynamic> productData) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final headers = await _authService.getAuthHeaders();
+      final response = await http.post(
+        Uri.parse('${FreshConfig.apiUrl}/products'),
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(productData),
+      );
+
+      _logger.debug('Create product response status: ${response.statusCode}');
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final Map<String, dynamic> productResponseData = responseData['product'] ?? responseData;
+        final product = Product.fromJson(productResponseData);
+        
+        _products.add(product);
+        _isLoading = false;
+        notifyListeners();
+        return product;
+      } else {
+        final responseData = json.decode(response.body);
+        _error = responseData['message'] ?? 'Failed to create product: ${response.statusCode}';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      }
+    } catch (e) {
+      _logger.error('Error creating product: $e');
+      _error = 'Error creating product: $e';
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  // Update existing product
+  Future<Product?> updateProduct(String id, Map<String, dynamic> productData) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final headers = await _authService.getAuthHeaders();
+      final response = await http.put(
+        Uri.parse('${FreshConfig.apiUrl}/products/$id'),
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(productData),
+      );
+
+      _logger.debug('Update product response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final Map<String, dynamic> productResponseData = responseData['product'] ?? responseData;
+        final product = Product.fromJson(productResponseData);
+        
+        // Update product in local list
+        final index = _products.indexWhere((p) => p.id == id);
+        if (index >= 0) {
+          _products[index] = product;
+        }
+        
+        _isLoading = false;
+        notifyListeners();
+        return product;
+      } else if (response.statusCode == 404) {
+        _error = 'Product not found';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      } else {
+        final responseData = json.decode(response.body);
+        _error = responseData['message'] ?? 'Failed to update product: ${response.statusCode}';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      }
+    } catch (e) {
+      _logger.error('Error updating product: $e');
+      _error = 'Error updating product: $e';
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  // Delete product
+  Future<bool> deleteProduct(String id) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final headers = await _authService.getAuthHeaders();
+      final response = await http.delete(
+        Uri.parse('${FreshConfig.apiUrl}/products/$id'),
+        headers: headers,
+      );
+
+      _logger.debug('Delete product response status: ${response.statusCode}');
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        // Remove product from local list
+        final index = _products.indexWhere((p) => p.id == id);
+        if (index >= 0) {
+          _products.removeAt(index);
+        }
+        
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else if (response.statusCode == 404) {
+        _error = 'Product not found';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      } else {
+        final responseData = json.decode(response.body);
+        _error = responseData['message'] ?? 'Failed to delete product: ${response.statusCode}';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _logger.error('Error deleting product: $e');
+      _error = 'Error deleting product: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Upload product image
+  Future<String?> uploadProductImage(List<int> imageBytes, String filename) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      // Create multipart request
+      final uri = Uri.parse('${FreshConfig.apiUrl}/upload/product-image');
+      final request = http.MultipartRequest('POST', uri);
+      
+      // Add auth headers
+      final headers = await _authService.getAuthHeaders();
+      request.headers.addAll(headers);
+      
+      // Add file
+      final multipartFile = http.MultipartFile.fromBytes(
+        'image',
+        imageBytes,
+        filename: filename,
+      );
+      request.files.add(multipartFile);
+      
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      _logger.debug('Upload product image response status: ${response.statusCode}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final Map<String, dynamic> responseData = json.decode(response.body);
+        final String imageUrl = responseData['imageUrl'] ?? responseData['url'] ?? responseData['path'];
+        
+        _isLoading = false;
+        notifyListeners();
+        return imageUrl;
+      } else {
+        final responseData = json.decode(response.body);
+        _error = responseData['message'] ?? 'Failed to upload image: ${response.statusCode}';
+        _isLoading = false;
+        notifyListeners();
+        return null;
+      }
+    } catch (e) {
+      _logger.error('Error uploading product image: $e');
+      _error = 'Error uploading product image: $e';
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
   }
 }

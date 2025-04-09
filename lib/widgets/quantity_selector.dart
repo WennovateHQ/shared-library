@@ -42,7 +42,7 @@ class QuantitySelector extends StatelessWidget {
       color: backgroundColor ?? FreshTheme.textInputBackground,
       borderRadius: BorderRadius.circular(compact ? 8 : FreshTheme.radius),
       border: Border.all(
-        color: FreshTheme.gray.withOpacity(0.5),
+        color: FreshTheme.gray.withAlpha(128), // 0.5 * 255 = 128
         width: 1,
       ),
     );
@@ -141,7 +141,7 @@ class QuantitySelector extends StatelessWidget {
             size: iconSize,
             color: isEnabled
                 ? iconColor
-                : FreshTheme.placeholder.withOpacity(0.3),
+                : FreshTheme.placeholder.withAlpha(77), // 0.3 * 255 ≈ 77
           ),
         ),
       ),

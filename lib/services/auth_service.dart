@@ -7,11 +7,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../config.dart';
+import '../utils/logging_service.dart';
 
 class AuthService with ChangeNotifier {
   // GoogleSignIn implementation temporarily disabled
   // late final GoogleSignIn _googleSignIn;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final LoggingService _logger = LoggingService('AuthService');
 
   bool _isAuthenticated = false;
   Map<String, dynamic>? _userData;
@@ -20,7 +22,7 @@ class AuthService with ChangeNotifier {
   Map<String, dynamic>? get userData => _userData;
 
   // User name getter
-  String? get userName => _userData?['name'];
+  String? get userName => _userData?['firstName'];
 
   // Singleton pattern
   static final AuthService _instance = AuthService._internal();
@@ -87,7 +89,7 @@ class AuthService with ChangeNotifier {
           _isAuthenticated = true;
         } catch (e) {
           // If getting profile fails, token might be invalid
-          debugPrint('Failed to get user profile on init: $e');
+          _logger.error('Failed to get user profile on init: $e');
           _isAuthenticated = false;
 
           // Clean up invalid session
@@ -98,7 +100,7 @@ class AuthService with ChangeNotifier {
         _isAuthenticated = false;
       }
     } catch (e) {
-      debugPrint('Error initializing auth service: $e');
+      _logger.error('Error initializing auth service: $e');
       _isAuthenticated = false;
     }
 
@@ -108,189 +110,94 @@ class AuthService with ChangeNotifier {
   // Login with email and password
   Future<Map<String, dynamic>> login(String email, String password) async {
     try {
+      _logger.debug('Attempting login for user: $email');
+      
       final response = await http.post(
-        Uri.parse('${FreshConfig.apiBaseUrl}/api/auth/login'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        Uri.parse(FreshConfig.loginEndpoint),
+        headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'email': email,
           'password': password,
         }),
       );
 
+      _logger.debug('Login response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         
-        // Debug the response structure
-        debugPrint('Auth response: ${response.body}');
-
-        // Store auth data - backend JWT format
+        // Store authentication data
         await _storeAuthData(
-          data['access_token'], 
-          data['refresh_token'],
-          data['user_role'],
-          data['user_id'],
-          email
+          data['token'],
+          data['refreshToken'] ?? '',
+          data['user']['role'], 
+          data['user']['id'],
+          data['user']['email'],
         );
-
-        // Store user data if available in the response
-        if (data['user'] != null) {
-          _userData = data['user'];
-        } else {
-          // If user data isn't returned directly, create basic user object
-          _userData = {
-            'id': data['user_id'] ?? 'unknown_id',
-            'email': email,
-            'role': data['user_role'] ?? 'consumer'
-          };
-        }
-
+        
+        // Store user data
+        _userData = data['user'];
         _isAuthenticated = true;
         notifyListeners();
-
-        return data;
+        
+        return data['user'];
       } else {
-        debugPrint('Login failed with status code: ${response.statusCode}');
-        debugPrint('Response body: ${response.body}');
+        // Handle error response
         final error = json.decode(response.body);
-        throw Exception(error['message'] ?? error['error'] ?? 'Login failed');
+        _logger.error('Login error: ${error['message']}');
+        throw Exception(error['message'] ?? 'Failed to login');
       }
     } catch (e) {
-      debugPrint('Login error: $e');
-
-      // Add test mode handling for login
-      if (FreshConfig.testingMode) {
-        // For testing mode, provide mock login data based on our JWT system
-        if (email == 'test@example.com' && password == 'password123') {
-          // Mock successful login with structure matching our JWT backend
-          final mockToken =
-              'mock_jwt_token_for_testing_${DateTime.now().millisecondsSinceEpoch}';
-          final mockRefreshToken = 
-              'mock_refresh_token_for_testing_${DateTime.now().millisecondsSinceEpoch}';
-          final mockUserRole = 'consumer';
-          final mockUserId = 'mock_user_id_${DateTime.now().millisecondsSinceEpoch}';
-
-          // Store auth data
-          await _storeAuthData(
-            mockToken,
-            mockRefreshToken,
-            mockUserRole,
-            mockUserId,
-            email
-          );
-
-          // Generate mock user data matching our backend structure
-          _userData = {
-            'id': mockUserId,
-            'email': email,
-            'role': mockUserRole,
-            'firstName': 'Test',
-            'lastName': 'User',
-            'profile': {
-              'phoneNumber': '1234567890',
-              'address': '123 Test Street'
-            }
-          };
-
-          _isAuthenticated = true;
-          notifyListeners();
-
-          return {
-            'access_token': mockToken,
-            'token_type': 'bearer',
-            'expires_in': 3600,
-            'refresh_token': mockRefreshToken,
-            'user_id': mockUserId,
-            'user_role': mockUserRole,
-            'user': _userData,
-          };
-        } else {
-          // Mock login failure with structure matching our backend error responses
-          throw Exception('Invalid email or password');
-        }
-      }
-
+      _logger.error('Login exception: $e');
       rethrow;
     }
   }
 
-  // Register new user
+  // Register a new user
   Future<Map<String, dynamic>> register(Map<String, dynamic> userData,
       {String userType = 'consumer'}) async {
     try {
-      // Add role to the userData if not already present
-      if (!userData.containsKey('role')) {
-        userData['role'] = userType;
-      }
-
-      // Ensure proper field naming to match backend expectations
-      final Map<String, dynamic> requestBody = {
-        'email': userData['email'],
-        'password': userData['password'],
-        'firstName': userData['firstName'],
-        'lastName': userData['lastName'],
-        'phoneNumber': userData['phoneNumber'],
-        'role': userData['role'] ?? 'consumer'
-      };
-
+      _logger.debug('Registering new user with email: ${userData['email']}');
+      
+      // Add user type to registration data
+      userData['role'] = userType;
+      
       final response = await http.post(
-        Uri.parse('${FreshConfig.apiBaseUrl}/api/auth/register'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: json.encode(requestBody),
+        Uri.parse(FreshConfig.registerEndpoint),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(userData),
       );
 
-      debugPrint('Registration response code: ${response.statusCode}');
-      debugPrint('Registration response: ${response.body}');
+      _logger.debug('Register response status: ${response.statusCode}');
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final data = json.decode(response.body);
         
-        // For development with TESTING=true, we'll store the verification token
-        // so we can use it without an actual email
-        if (data['user'] != null && data['user']['verificationToken'] != null) {
-          // Store verification token in secure storage for testing purposes
-          await _secureStorage.write(
-            key: 'verification_token',
-            value: data['user']['verificationToken']
+        // Store authentication data if tokens are provided
+        if (data['token'] != null) {
+          await _storeAuthData(
+            data['token'],
+            data['refreshToken'] ?? '',
+            data['user']['role'], 
+            data['user']['id'],
+            data['user']['email'],
           );
-          debugPrint('Saved verification token: ${data['user']['verificationToken']}');
+          
+          // Update authentication state
+          _userData = data['user'];
+          _isAuthenticated = true;
+          notifyListeners();
         }
         
-        // Return the full response data
-        return data;
+        return data['user'];
       } else {
-        debugPrint('Registration failed with status code: ${response.statusCode}');
+        // Handle error response
         final error = json.decode(response.body);
-        throw Exception(error['message'] ?? error['error'] ?? 'Registration failed');
+        _logger.error('Registration error: ${error['message']}');
+        throw Exception(error['message'] ?? 'Failed to register');
       }
     } catch (e) {
-      debugPrint('Registration error: $e');
-      
-      // Test mode handling
-      if (FreshConfig.testingMode) {
-        // Mock successful registration
-        final mockToken = 'mock_jwt_token_for_testing_${DateTime.now().millisecondsSinceEpoch}';
-        
-        // Store auth data
-        await _storeAuthData(mockToken, 'mock_refresh_token', userType, 'mock_user_id_${DateTime.now().millisecondsSinceEpoch}', userData['email']);
-        
-        _userData = userData;
-        _isAuthenticated = true;
-        notifyListeners();
-        
-        return {
-          'access_token': mockToken,
-          'user_id': 'mock_user_id_${DateTime.now().millisecondsSinceEpoch}',
-          'role': userType,
-          'message': 'Registration successful'
-        };
-      }
-      
+      _logger.error('Registration exception: $e');
       rethrow;
     }
   }
@@ -298,27 +205,56 @@ class AuthService with ChangeNotifier {
   // Logout user
   Future<bool> logout() async {
     try {
-      // Clear secure storage
-      await _secureStorage.deleteAll();
-
-      // Clear shared preferences
+      _logger.debug('Logging out user');
+      
+      final token = await _getSecureToken();
+      if (token != null) {
+        // Send logout request to backend
+        try {
+          final response = await http.post(
+            Uri.parse(FreshConfig.logoutEndpoint),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          );
+          _logger.debug('Logout response status: ${response.statusCode}');
+        } catch (e) {
+          // Even if the backend request fails, continue with local logout
+          _logger.error('Error sending logout to backend: $e');
+        }
+      }
+      
+      // Clear local storage and state
+      await _secureStorage.delete(key: FreshConfig.tokenKey);
+      await _secureStorage.delete(key: FreshConfig.refreshTokenKey);
+      await _secureStorage.delete(key: FreshConfig.userRoleKey);
+      await _secureStorage.delete(key: FreshConfig.userIdKey);
+      await _secureStorage.delete(key: FreshConfig.userEmailKey);
+      
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('isLoggedIn');
-      await prefs.remove('userType');
-
-      _isAuthenticated = false;
+      await prefs.setBool('isLoggedIn', false);
+      
       _userData = null;
+      _isAuthenticated = false;
       notifyListeners();
-
+      
       return true;
     } catch (e) {
+      _logger.error('Logout exception: $e');
       return false;
     }
   }
 
-  // Password Reset
+  // Request password reset
   Future<bool> requestPasswordReset(String email) async {
     try {
+      if (FreshConfig.testingMode) {
+        // For testing purposes, simulate success
+        await Future.delayed(const Duration(seconds: 1));
+        return true;
+      }
+      
       final response = await http.post(
         Uri.parse(FreshConfig.forgotPasswordEndpoint),
         headers: {'Content-Type': 'application/json'},
@@ -329,89 +265,70 @@ class AuthService with ChangeNotifier {
         return true;
       } else {
         final error = json.decode(response.body);
-        throw Exception(
-            error['message'] ?? 'Failed to send password reset email');
+        throw Exception(error['message'] ?? 'Failed to send password reset email');
       }
     } catch (e) {
-      if (!FreshConfig.testingMode) {
-        rethrow;
+      _logger.error('Password reset request error: $e');
+      if (FreshConfig.testingMode) {
+        return true;
       }
-
-      // For testing mode, simulate successful password reset request
-      return true;
+      rethrow;
     }
   }
 
+  // Reset password with token
   Future<bool> resetPassword(String token, String newPassword) async {
     try {
+      _logger.debug('Resetting password with token');
+      
       final response = await http.post(
         Uri.parse(FreshConfig.resetPasswordEndpoint),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'token': token,
-          'password': newPassword,
+          'newPassword': newPassword,
         }),
       );
 
+      _logger.debug('Reset password response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         return true;
       } else {
+        // Handle error response
         final error = json.decode(response.body);
+        _logger.error('Reset password error: ${error['message']}');
         throw Exception(error['message'] ?? 'Failed to reset password');
       }
     } catch (e) {
-      if (!FreshConfig.testingMode) {
-        rethrow;
-      }
-
-      // For testing mode, simulate successful password reset
-      return true;
+      _logger.error('Reset password exception: $e');
+      rethrow;
     }
   }
 
-  // Verify email with verification token
+  // Verify email address
   Future<bool> verifyEmail(String token) async {
     try {
-      // If token is empty, try to retrieve it from secure storage (for testing)
-      if (token.isEmpty) {
-        final storedToken = await _secureStorage.read(key: 'verification_token');
-        if (storedToken != null) {
-          token = storedToken;
-          debugPrint('Using stored verification token: $token');
-        } else {
-          throw Exception('Verification token not provided');
-        }
-      }
-
+      _logger.debug('Verifying email with token');
+      
       final response = await http.post(
-        Uri.parse('${FreshConfig.apiBaseUrl}/api/auth/verify'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        Uri.parse(FreshConfig.verifyEmailEndpoint),
+        headers: {'Content-Type': 'application/json'},
         body: json.encode({'token': token}),
       );
 
-      debugPrint('Verification response status: ${response.statusCode}');
-      debugPrint('Verification response: ${response.body}');
+      _logger.debug('Verify email response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        // Clear the stored verification token after successful verification
-        await _secureStorage.delete(key: 'verification_token');
         return true;
       } else {
+        // Handle error response
         final error = json.decode(response.body);
-        throw Exception(error['message'] ?? error['error'] ?? 'Email verification failed');
+        _logger.error('Verify email error: ${error['message']}');
+        throw Exception(error['message'] ?? 'Failed to verify email');
       }
     } catch (e) {
-      debugPrint('Email verification error: $e');
-      
-      // Testing mode - auto-verify
-      if (FreshConfig.testingMode) {
-        debugPrint('Testing mode: Auto-verifying email');
-        return true;
-      }
-      
+      _logger.error('Verify email exception: $e');
       rethrow;
     }
   }
@@ -419,204 +336,206 @@ class AuthService with ChangeNotifier {
   // Resend verification email
   Future<bool> resendVerificationEmail(String email) async {
     try {
+      _logger.debug('Requesting verification email resend for: $email');
+      
       final response = await http.post(
         Uri.parse('${FreshConfig.apiUrl}/auth/resend-verification'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'email': email}),
       );
 
+      _logger.debug('Resend verification email response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         return true;
       } else {
+        // Handle error response
         final error = json.decode(response.body);
-        throw Exception(
-            error['message'] ?? 'Failed to resend verification email');
+        _logger.error('Resend verification email error: ${error['message']}');
+        throw Exception(error['message'] ?? 'Failed to resend verification email');
       }
     } catch (e) {
-      if (!FreshConfig.testingMode) {
-        rethrow;
-      }
-
-      // For testing mode, simulate successful email resend
-      return true;
+      _logger.error('Resend verification email exception: $e');
+      rethrow;
     }
   }
 
-  // Update User Profile
+  // Update user profile
   Future<Map<String, dynamic>> updateProfile(
       Map<String, dynamic> userData) async {
     try {
+      _logger.debug('Updating user profile with data: ${userData.keys.join(", ")}');
+      
       final token = await _getSecureToken();
       if (token == null) {
-        throw Exception('Not authenticated');
+        throw Exception('No authentication token found');
       }
 
       final response = await http.put(
         Uri.parse(FreshConfig.updateProfileEndpoint),
-        headers: await getAuthHeaders(),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
         body: json.encode(userData),
       );
 
+      _logger.debug('Update profile response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-
-        // Update local user data
-        _userData = data['user'];
+        
+        // Update user data
+        _userData = data['user'] ?? data;
         notifyListeners();
-
-        return data;
+        
+        return _userData!;
       } else {
+        // Handle error response
         final error = json.decode(response.body);
+        _logger.error('Update profile error: ${error['message']}');
         throw Exception(error['message'] ?? 'Failed to update profile');
       }
     } catch (e) {
-      if (!FreshConfig.testingMode) {
-        rethrow;
-      }
-
-      // For testing mode, simulate successful profile update
-
-      // Update local user data with new data while preserving existing data
-      _userData = {
-        ..._userData ?? {},
-        ...userData,
-      };
-
-      notifyListeners();
-
-      return {
-        'success': true,
-        'user': _userData,
-      };
+      _logger.error('Update profile exception: $e');
+      rethrow;
     }
   }
 
-  // Change Password
+  // Change user password
   Future<bool> changePassword(
       String currentPassword, String newPassword) async {
     try {
+      _logger.debug('Changing password for current user');
+      
       final token = await _getSecureToken();
       if (token == null) {
-        throw Exception('Not authenticated');
+        throw Exception('No authentication token found');
       }
 
       final response = await http.post(
         Uri.parse(FreshConfig.changePasswordEndpoint),
-        headers: await getAuthHeaders(),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
         body: json.encode({
           'currentPassword': currentPassword,
           'newPassword': newPassword,
         }),
       );
 
+      _logger.debug('Change password response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         return true;
       } else {
+        // Handle error response
         final error = json.decode(response.body);
+        _logger.error('Change password error: ${error['message']}');
         throw Exception(error['message'] ?? 'Failed to change password');
       }
     } catch (e) {
-      if (!FreshConfig.testingMode) {
-        rethrow;
-      }
-
-      // For testing mode, simulate successful password change
-      return true;
+      _logger.error('Change password exception: $e');
+      rethrow;
     }
   }
 
-  // Upload Profile Image
+  // Upload profile image
   Future<String> uploadProfileImage(XFile image) async {
     try {
-      final token = await _getSecureToken();
-      if (token == null) {
-        throw Exception('Not authenticated');
+      if (FreshConfig.testingMode) {
+        // For testing purposes, simulate success
+        await Future.delayed(const Duration(seconds: 2));
+        
+        // Return a mock image URL
+        return 'https://picsum.photos/200';
       }
-
-      // Create a multipart request
+      
+      // Create multipart request
       final request = http.MultipartRequest(
         'POST',
         Uri.parse(FreshConfig.uploadProfileImageEndpoint),
       );
-
-      // Set the authorization header
-      request.headers['Authorization'] = 'Bearer $token';
-
-      // Add the file to the request
-      request.files.add(await http.MultipartFile.fromPath(
+      
+      // Add auth headers
+      final headers = await getAuthHeaders();
+      request.headers.addAll(headers);
+      
+      // Add file
+      final bytes = await image.readAsBytes();
+      final file = http.MultipartFile.fromBytes(
         'image',
-        image.path,
-      ));
-
-      // Send the request
-      final response = await request.send();
-
+        bytes,
+        filename: image.name,
+      );
+      request.files.add(file);
+      
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      
       if (response.statusCode == 200) {
-        final responseData = await response.stream.bytesToString();
-        final data = json.decode(responseData);
-
-        // Update profile image in user data
-        if (_userData != null) {
-          _userData!['profileImage'] = data['imageUrl'];
-          notifyListeners();
+        final data = json.decode(response.body);
+        final imageUrl = data['imageUrl'] ?? data['url'];
+        
+        if (imageUrl != null) {
+          return imageUrl;
+        } else {
+          throw Exception('No image URL returned from server');
         }
-
-        return data['imageUrl'];
       } else {
-        throw Exception('Failed to upload image');
+        final error = json.decode(response.body);
+        throw Exception(error['message'] ?? 'Failed to upload profile image');
       }
     } catch (e) {
-      if (!FreshConfig.testingMode) {
-        rethrow;
+      _logger.error('Profile image upload error: $e');
+      if (FreshConfig.testingMode) {
+        return 'https://picsum.photos/200';
       }
-
-      // For testing mode, simulate successful image upload
-      final mockImageUrl =
-          'https://example.com/uploads/profile_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
-
-      // Update profile image in user data
-      if (_userData != null) {
-        _userData!['profileImage'] = mockImageUrl;
-        notifyListeners();
-      }
-
-      return mockImageUrl;
+      rethrow;
     }
   }
 
-  // Get User Profile
+  // Get user profile from backend
   Future<Map<String, dynamic>> getUserProfile() async {
-    if (!_isAuthenticated) {
-      throw Exception('User not authenticated');
-    }
-
-    final token = await _getSecureToken();
-    if (token == null) {
-      throw Exception('Not authenticated');
-    }
-
     try {
+      _logger.debug('Fetching user profile');
+      
+      final token = await _getSecureToken();
+      if (token == null) {
+        throw Exception('No authentication token found');
+      }
+
       final response = await http.get(
         Uri.parse(FreshConfig.userProfileEndpoint),
-        headers: await getAuthHeaders(),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
       );
+
+      _logger.debug('Get user profile response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        // Update the user data with the profile information
-        _userData = data;
+        
+        // Update user data
+        _userData = data['user'] ?? data;
+        _isAuthenticated = true;
         notifyListeners();
-        return data;
-      } else if (response.statusCode == 401) {
-        // Token is invalid or expired
-        _isAuthenticated = false;
-        notifyListeners();
-        throw Exception('Authentication token expired');
+        
+        return _userData!;
       } else {
-        throw Exception('Failed to load user profile: ${response.statusCode}');
+        // Handle error response
+        final error = json.decode(response.body);
+        _logger.error('Get user profile error: ${error['message']}');
+        throw Exception(error['message'] ?? 'Failed to get user profile');
       }
     } catch (e) {
-      debugPrint('Get user profile error: $e');
+      _logger.error('Get user profile exception: $e');
+      _isAuthenticated = false;
+      notifyListeners();
       rethrow;
     }
   }
@@ -633,7 +552,7 @@ class AuthService with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isLoggedIn', true);
     } catch (e) {
-      debugPrint('Error storing auth data: $e');
+      _logger.error('Error storing auth data: $e');
     }
   }
 
@@ -641,7 +560,7 @@ class AuthService with ChangeNotifier {
     try {
       return await _secureStorage.read(key: FreshConfig.tokenKey);
     } catch (e) {
-      debugPrint('Error retrieving token: $e');
+      _logger.error('Error retrieving token: $e');
       return null;
     }
   }
@@ -687,26 +606,26 @@ class AuthService with ChangeNotifier {
   // Forgot Password
   Future<bool> forgotPassword(String email) async {
     try {
+      _logger.debug('Requesting password reset for: $email');
+      
       final response = await http.post(
         Uri.parse(FreshConfig.forgotPasswordEndpoint),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'email': email}),
       );
 
+      _logger.debug('Forgot password response status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         return true;
       } else {
         final error = json.decode(response.body);
-        throw Exception(
-            error['message'] ?? 'Failed to send password reset email');
+        _logger.error('Forgot password error: ${error['message']}');
+        throw Exception(error['message'] ?? 'Failed to send password reset email');
       }
     } catch (e) {
-      if (!FreshConfig.testingMode) {
-        rethrow;
-      }
-
-      // For testing mode, simulate successful password reset request
-      return true;
+      _logger.error('Forgot password exception: $e');
+      rethrow;
     }
   }
 
@@ -725,7 +644,7 @@ class AuthService with ChangeNotifier {
           _isAuthenticated = true;
         } catch (e) {
           // If getting profile fails, token might be invalid
-          debugPrint('Failed to get user profile on init: $e');
+          _logger.error('Failed to get user profile on init: $e');
           _isAuthenticated = false;
 
           // Clean up invalid session
@@ -736,7 +655,7 @@ class AuthService with ChangeNotifier {
         _isAuthenticated = false;
       }
     } catch (e) {
-      debugPrint('Error initializing auth service: $e');
+      _logger.error('Error initializing auth service: $e');
       _isAuthenticated = false;
     }
 

@@ -3,13 +3,10 @@
 
 class FreshConfig {
   /// Backend API base URL
-  static const String apiBaseUrl = 'https://api.freshfarmily.com';  // Production server
-
-  /// API path
-  static const String apiPath = 'api';
+  static const String apiBaseUrl = 'http://localhost:5000'; // Development server
 
   /// Full API URL
-  static const String apiUrl = '$apiBaseUrl/$apiPath';
+  static const String apiUrl = '$apiBaseUrl';
 
   /// Auth endpoints
   static const String loginEndpoint = '$apiUrl/auth/login';
@@ -17,15 +14,17 @@ class FreshConfig {
   static const String googleSignInEndpoint = '$apiUrl/auth/google-signin';
   static const String forgotPasswordEndpoint = '$apiUrl/auth/forgot-password';
   static const String resetPasswordEndpoint = '$apiUrl/auth/reset-password';
-  static const String verifyEmailEndpoint = '$apiUrl/auth/verify-email';
+  static const String verifyEmailEndpoint = '$apiUrl/auth/verify';
   static const String changePasswordEndpoint = '$apiUrl/auth/change-password';
-  static const String refreshTokenEndpoint = '$apiUrl/auth/refresh-token';
+  static const String refreshTokenEndpoint = '$apiUrl/auth/refresh';
   static const String logoutEndpoint = '$apiUrl/auth/logout';
+  static const String meEndpoint = '$apiUrl/auth/me';
 
   /// User endpoints
-  static const String userProfileEndpoint = '$apiUrl/user/profile';
-  static const String updateProfileEndpoint = '$apiUrl/user/profile/update';
-  static const String uploadProfileImageEndpoint = '$apiUrl/user/profile/image';
+  static const String userProfileEndpoint = '$apiUrl/auth/me';
+  static const String updateProfileEndpoint = '$apiUrl/user/profile';
+  static const String uploadProfileImageEndpoint =
+      '$apiUrl/upload/profile-image';
 
   /// Storage keys
   static const String tokenKey = 'auth_token';
@@ -37,7 +36,7 @@ class FreshConfig {
   static const String isLoggedInKey = 'is_logged_in';
 
   /// Testing mode flag
-  static const bool testingMode = false; // Disabled for production to ensure connection to real backend
+  static const bool testingMode = false; // Disable testing mode - always connect to real backend
 
   /// Google Sign-In scopes
   static const List<String> googleSignInScopes = [
@@ -98,13 +97,17 @@ class FreshConfig {
   static const int refreshTokenExpiryDays = 30; // 30 day refresh token expiry
 
   /// Minimum password requirements
-  static const int minPasswordLength = 8;
-  static const bool requirePasswordSpecialChar = true;
-  static const bool requirePasswordUppercase = true;
-  static const bool requirePasswordNumber = true;
+  static const int minPasswordLength =
+      6; // Updated to match backend requirement
+  static const bool requirePasswordSpecialChar =
+      false; // Simplified for development
+  static const bool requirePasswordUppercase =
+      false; // Simplified for development
+  static const bool requirePasswordNumber = false; // Simplified for development
 
   /// Registration email verification settings
-  static const bool requireEmailVerification = true;
+  static const bool requireEmailVerification =
+      false; // Disabled for development
   static const int verificationCodeExpiryMinutes = 30;
   static const int maxResendVerificationAttempts = 5;
 

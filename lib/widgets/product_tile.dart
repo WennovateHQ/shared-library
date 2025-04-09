@@ -69,7 +69,7 @@ class ProductTile extends StatelessWidget {
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
-                          color: FreshTheme.gray.withOpacity(0.3),
+                          color: FreshTheme.gray.withAlpha(77),
                           child: const Center(
                             child: Icon(
                               Icons.image_not_supported_outlined,
@@ -112,7 +112,7 @@ class ProductTile extends StatelessWidget {
                   Positioned.fill(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
+                        color: Colors.black.withAlpha(128),
                         borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(FreshTheme.radius),
                           topRight: Radius.circular(FreshTheme.radius),
@@ -144,7 +144,7 @@ class ProductTile extends StatelessWidget {
                       category ?? farmName ?? "",
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.primary.withOpacity(0.8),
+                        color: theme.colorScheme.primary.withAlpha(204),
                       ),
                     ),
                   

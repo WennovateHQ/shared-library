@@ -67,7 +67,7 @@ class FreshButton extends StatelessWidget {
         break;
       case FreshButtonType.secondary:
         buttonStyle = ElevatedButton.styleFrom(
-          backgroundColor: primaryColor.withOpacity(0.1),
+          backgroundColor: primaryColor.withAlpha(26), // 0.1 * 255 ≈ 26
           foregroundColor: primaryColor,
           elevation: 0,
           shape: RoundedRectangleBorder(
